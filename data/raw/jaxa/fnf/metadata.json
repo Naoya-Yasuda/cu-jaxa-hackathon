@@ -1,0 +1,25 @@
+{
+  "collection": "JAXA.EORC_ALOS-2.PALSAR-2_FNF.v2.1.0_global_yearly",
+  "band": "FNF",
+  "ppu": 120,
+  "bbox": [
+    138.9,
+    35.55,
+    139.35,
+    35.95
+  ],
+  "date_range": [
+    "2020-01-01T00:00:00",
+    "2020-12-31T00:00:00"
+  ],
+  "time_series": false,
+  "n_images": 1,
+  "shape": [
+    [
+      35,
+      40,
+      1
+    ]
+  ],
+  "fetched_at": "2026-02-11T17:09:06.824386"
+}

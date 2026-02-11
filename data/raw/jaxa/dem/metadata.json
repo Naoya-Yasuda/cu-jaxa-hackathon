@@ -1,0 +1,25 @@
+{
+  "collection": "JAXA.EORC_ALOS.PRISM_AW3D30.v3.2_global",
+  "band": "DSM",
+  "ppu": 120,
+  "bbox": [
+    138.9,
+    35.55,
+    139.35,
+    35.95
+  ],
+  "date_range": [
+    "2021-02-01T00:00:00",
+    "2021-02-28T00:00:00"
+  ],
+  "time_series": false,
+  "n_images": 1,
+  "shape": [
+    [
+      35,
+      40,
+      1
+    ]
+  ],
+  "fetched_at": "2026-02-11T17:09:03.943898"
+}
