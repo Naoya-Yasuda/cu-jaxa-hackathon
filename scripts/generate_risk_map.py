@@ -193,10 +193,15 @@ def compute_combined_risk(spatial_risk_df, akita_mesh, seasonal_factors, month_n
     # 季節係数を付与
     combined["seasonal_factor"] = seasonal_factors[month_num]
 
-    # 統合リスク = 空間リスク × 季節係数（上限100）
-    combined["risk_score"] = np.clip(
-        combined["spatial_risk"] * combined["seasonal_factor"], 0, 100
-    )
+    # 統合リスク = 空間リスク × 季節係数
+    # 季節係数の下限: 活動期(4-11月)は最低0.3（完全ゼロを防止）
+    if 4 <= month_num <= 11:
+        combined["seasonal_factor"] = combined["seasonal_factor"].clip(lower=0.3)
+
+    raw_risk = combined["spatial_risk"] * combined["seasonal_factor"]
+    # 正規化: 最大値で割って0-100にスケーリング（clipだと上位が潰れるため）
+    max_raw = raw_risk.quantile(0.995) if raw_risk.max() > 100 else 100
+    combined["risk_score"] = np.clip(raw_risk / max(max_raw, 100) * 100, 0, 100)
 
     print(f"\n  統合リスク統計 ({month_num}月):")
     print(f"    空間リスク:   平均={combined['spatial_risk'].mean():.1f}%, 最大={combined['spatial_risk'].max():.1f}%")
@@ -401,8 +406,13 @@ def main():
     # Baselineモデル読み込み（AUC 0.954）
     model_path = MODEL_DIR / "model_baseline.lgb"
     if not model_path.exists():
-        # フォールバック: fullモデル
+        # フォールバック: fullモデル（警告付き）
         model_path = MODEL_DIR / "model_full.lgb"
+        if not model_path.exists():
+            print("ERROR: モデルファイルが見つかりません。先に train.py を実行してください。")
+            sys.exit(1)
+        print(f"⚠ WARNING: model_baseline.lgb が見つかりません。model_full.lgb にフォールバック。")
+        print(f"  → train.py を再実行してベースラインモデルを生成してください。")
     model = lgb.Booster(model_file=str(model_path))
     print(f"モデル: {model_path.name} (特徴量: {model.feature_name()})")
 

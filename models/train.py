@@ -282,7 +282,7 @@ def compare_models(baseline_result, full_result):
     if full_result and "importance" in full_result:
         imp = full_result["importance"]
         total = imp["importance"].sum()
-        satellite_features = ["ndvi", "ndvi_diff", "lst_celsius", "precip", "landcover"]
+        satellite_features = ["ndvi", "ndvi_diff", "ndvi_anomaly", "lst_celsius", "precip", "landcover"]
         sat_imp = imp[imp["feature"].isin(satellite_features)]["importance"].sum()
         print(f"\n  衛星データ特徴量の寄与率: {sat_imp/total*100:.1f}% (gain合計比)")
 
@@ -291,11 +291,16 @@ def save_results(baseline_result, full_result):
     """結果を保存"""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # モデル保存
+    # モデル保存（baseline + full 両方）
+    if baseline_result and baseline_result["model"]:
+        baseline_path = OUTPUT_DIR / "model_baseline.lgb"
+        baseline_result["model"].save_model(str(baseline_path))
+        print(f"\nベースラインモデル保存: {baseline_path}")
+
     if full_result and full_result["model"]:
         model_path = OUTPUT_DIR / "model_full.lgb"
         full_result["model"].save_model(str(model_path))
-        print(f"\nモデル保存: {model_path}")
+        print(f"フルモデル保存: {model_path}")
 
     # 評価結果JSON
     results = {

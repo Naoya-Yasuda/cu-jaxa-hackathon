@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-13T17:00:18.434800",
+  "timestamp": "2026-02-13T17:16:19.257267",
   "split_method": "temporal (train: ~2024, test: 2025~)",
   "scale_pos_weight": 1.0,
   "note": "NaN removed: LightGBM native NaN handling",
