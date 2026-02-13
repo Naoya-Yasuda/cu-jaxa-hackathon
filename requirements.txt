@@ -16,6 +16,7 @@ scikit-learn>=1.3
 folium>=0.17
 matplotlib>=3.8
 plotly>=5.18
+seaborn>=0.13
 
 # Web API
 fastapi>=0.110
@@ -27,3 +28,5 @@ httpx>=0.27
 # Utilities
 python-dateutil>=2.8
 tqdm>=4.66
+scipy>=1.11
+pyarrow>=14.0

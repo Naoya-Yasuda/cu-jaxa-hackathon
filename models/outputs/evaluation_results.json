@@ -1,0 +1,112 @@
+{
+  "timestamp": "2026-02-13T17:00:18.434800",
+  "split_method": "temporal (train: ~2024, test: 2025~)",
+  "scale_pos_weight": 1.0,
+  "note": "NaN removed: LightGBM native NaN handling",
+  "baseline": {
+    "auc": 0.9542938808710584,
+    "recall": 0.8000322268772156,
+    "precision": 0.4167016365925304,
+    "f1": 0.5479830031455217,
+    "threshold": 0.16424137304334724,
+    "features": [
+      "lat_center",
+      "lon_center",
+      "elevation",
+      "is_forest",
+      "month"
+    ],
+    "train_size": 72416,
+    "test_size": 99296,
+    "importance": [
+      {
+        "feature": "lon_center",
+        "importance": 75889.3848530971
+      },
+      {
+        "feature": "elevation",
+        "importance": 57128.19111141664
+      },
+      {
+        "feature": "lat_center",
+        "importance": 50024.21250131755
+      },
+      {
+        "feature": "is_forest",
+        "importance": 8941.814466601516
+      },
+      {
+        "feature": "month",
+        "importance": 6787.248689574168
+      }
+    ]
+  },
+  "full_model": {
+    "auc": 0.9381110708722308,
+    "recall": 0.8003544956493716,
+    "precision": 0.3672729961549837,
+    "f1": 0.5034972123669539,
+    "threshold": 0.12288659925680721,
+    "features": [
+      "lat_center",
+      "lon_center",
+      "elevation",
+      "is_forest",
+      "landcover",
+      "ndvi",
+      "ndvi_diff",
+      "ndvi_anomaly",
+      "lst_celsius",
+      "precip",
+      "month"
+    ],
+    "train_size": 72416,
+    "test_size": 99296,
+    "importance": [
+      {
+        "feature": "lon_center",
+        "importance": 60265.70203467761
+      },
+      {
+        "feature": "elevation",
+        "importance": 35638.11744746547
+      },
+      {
+        "feature": "lat_center",
+        "importance": 30405.905937910044
+      },
+      {
+        "feature": "is_forest",
+        "importance": 9829.26065304887
+      },
+      {
+        "feature": "landcover",
+        "importance": 5893.458985471516
+      },
+      {
+        "feature": "ndvi",
+        "importance": 4542.761312299728
+      },
+      {
+        "feature": "lst_celsius",
+        "importance": 1811.3792489171028
+      },
+      {
+        "feature": "ndvi_diff",
+        "importance": 1381.5608466783888
+      },
+      {
+        "feature": "ndvi_anomaly",
+        "importance": 1053.9130519038226
+      },
+      {
+        "feature": "precip",
+        "importance": 541.3126928955317
+      },
+      {
+        "feature": "month",
+        "importance": 270.66943168640137
+      }
+    ]
+  }
+}

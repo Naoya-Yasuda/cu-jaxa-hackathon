@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bear Sighting Risk Prediction - Folium Map</title>
+
+    <!-- Folium CSS/JS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.6.0/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.6.0/leaflet.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            z-index: 50;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-group label {
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .control-group select {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        .control-group select:hover {
+            border-color: #667eea;
+        }
+
+        .legend {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            background: #eee;
+        }
+
+        .map-container #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .info {
+            background: white;
+            padding: 15px 20px;
+            border-top: 1px solid #ddd;
+            font-size: 12px;
+            color: #666;
+            z-index: 50;
+        }
+
+        .info a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .info a:hover {
+            text-decoration: underline;
+        }
+
+        .loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+            z-index: 200;
+        }
+
+        .loading.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Bear Sighting Risk Prediction System</h1>
+        <p>Tohoku 3 Prefecture Risk Map (Akita, Iwate, Fukushima) | Machine Learning Based Prediction</p>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="month-select">Display Month:</label>
+            <select id="month-select" onchange="updateRisk()">
+                <option value="2025-02">February 2025</option>
+                <option value="2025-01">January 2025</option>
+                <option value="2024-12">December 2024</option>
+                <option value="2024-11">November 2024</option>
+                <option value="2024-10">October 2024</option>
+                <option value="2024-09">September 2024</option>
+                <option value="2024-08">August 2024</option>
+            </select>
+        </div>
+
+        <div class="legend">
+            <div style="font-weight: 600; margin-bottom: 10px;">Risk Level</div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ff0000;"></div>
+                <span>High Risk (80-100)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffaa00;"></div>
+                <span>Medium Risk (40-79)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #00cc00;"></div>
+                <span>Low Risk (0-39)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-container">
+        <div id="map"></div>
+        <div class="loading" id="loading">
+            <p>Loading risk data...</p>
+        </div>
+    </div>
+
+    <div class="info">
+        <p>
+            Sightings: Red markers indicate bear sighting locations |
+            Risk Map: Heatmap color intensity indicates risk level |
+            Updates: Monthly (1st of each month) |
+            <a href="/api/health">API Health Check</a> |
+            <a href="/api/feature-importance">Feature Importance API</a>
+        </p>
+    </div>
+
+    <script>
+        // Initialize map
+        const center = [38.5, 140.5];  // Center of Tohoku 3 prefectures
+        const map = L.map('map').setView(center, 7);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Store for current layers
+        let currentHeatLayer = null;
+        let currentMarkerLayer = null;
+
+        function showLoading(show = true) {
+            document.getElementById('loading').classList.toggle('active', show);
+        }
+
+        function updateRisk() {
+            const month = document.getElementById('month-select').value;
+            console.log('Updating risk for month:', month);
+
+            showLoading(true);
+
+            // Fetch risk data
+            fetch(`/api/risk?date=${month}`)
+                .then(r => {
+                    if (!r.ok) throw new Error(`API error: ${r.status}`);
+                    return r.json();
+                })
+                .then(data => {
+                    console.log('Risk data received:', data);
+                    updateRiskHeatmap(data.risk_scores);
+                    showLoading(false);
+                })
+                .catch(e => {
+                    console.error('Risk update error:', e);
+                    showLoading(false);
+                    alert('Failed to load risk data: ' + e.message);
+                });
+
+            // Fetch and update sightings
+            const today = new Date();
+            const monthStart = month + '-01';
+            const monthEnd = month + '-' + new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+
+            fetch(`/api/sightings?from=${monthStart}&to=${monthEnd}`)
+                .then(r => r.json())
+                .then(data => {
+                    console.log('Sightings data received:', data);
+                    updateSightingMarkers(data.sightings);
+                })
+                .catch(e => console.error('Sightings update error:', e));
+        }
+
+        function updateRiskHeatmap(riskScores) {
+            // Remove existing heatmap layer
+            if (currentHeatLayer) {
+                map.removeLayer(currentHeatLayer);
+            }
+
+            // Build heatmap data from risk scores
+            const heatData = [];
+            const bbox = [139.2, 36.8, 142.1, 40.5];
+            const [west, south, east, north] = bbox;
+
+            // Create grid of points with risk scores
+            const latStep = (north - south) / 15;
+            const lonStep = (east - west) / 15;
+
+            let pointIndex = 0;
+            for (let lat = south; lat < north; lat += latStep) {
+                for (let lon = west; lon < east; lon += lonStep) {
+                    const meshId = `mesh_${Math.floor((lat - south) / latStep)}_${Math.floor((lon - west) / lonStep)}`;
+                    const score = riskScores[meshId];
+
+                    if (score !== undefined) {
+                        const intensity = score / 100;
+                        heatData.push([lat, lon, intensity]);
+                    }
+                    pointIndex++;
+                }
+            }
+
+            // Add heatmap layer
+            if (heatData.length > 0) {
+                // Using simple marker clustering with color coding instead of HeatMap
+                heatData.forEach(([lat, lon, intensity]) => {
+                    const risk = Math.round(intensity * 100);
+                    let color = '#00cc00';  // Green
+                    if (risk >= 80) color = '#ff0000';  // Red
+                    else if (risk >= 40) color = '#ffaa00';  // Orange
+
+                    L.circleMarker([lat, lon], {
+                        radius: 3,
+                        fillColor: color,
+                        color: color,
+                        weight: 0.5,
+                        opacity: 0.7,
+                        fillOpacity: 0.5,
+                        title: `Risk: ${risk}%`
+                    }).addTo(map);
+                });
+            }
+
+            console.log(`Added ${heatData.length} heatmap points`);
+        }
+
+        function updateSightingMarkers(sightings) {
+            // Remove existing markers
+            if (currentMarkerLayer) {
+                map.removeLayer(currentMarkerLayer);
+            }
+
+            // Create marker group
+            currentMarkerLayer = L.featureGroup();
+
+            // Add markers for each sighting
+            sightings.forEach(sighting => {
+                if (sighting.latitude && sighting.longitude) {
+                    const popup = `
+                        <div>
+                            <strong>Sighting Report</strong><br>
+                            Date: ${sighting.date}<br>
+                            Location: ${sighting.location || sighting.prefecture}<br>
+                            ${sighting.details ? 'Details: ' + sighting.details : ''}
+                        </div>
+                    `;
+
+                    L.marker([sighting.latitude, sighting.longitude], {
+                        icon: L.icon({
+                            iconUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 41"><path d="M12.5 0C5.6 0 0 5.6 0 12.5c0 10.8 12.5 28 12.5 28s12.5-17.2 12.5-28C25 5.6 19.4 0 12.5 0z" fill="red"/><circle cx="12.5" cy="13" r="5" fill="white"/></svg>',
+                            iconSize: [25, 41],
+                            iconAnchor: [12, 41],
+                            popupAnchor: [1, -34]
+                        })
+                    })
+                        .bindPopup(popup)
+                        .addTo(currentMarkerLayer);
+                }
+            });
+
+            currentMarkerLayer.addTo(map);
+            console.log(`Added ${sightings.length} sighting markers`);
+        }
+
+        // Initial load
+        console.log('Initializing map...');
+        updateRisk();
+    </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "collection": "Copernicus.C3S_PROBA-V_LCCS_global_yearly",
+  "band": "LCCS",
+  "ppu": 20,
+  "bbox": [
+    138.9,
+    35.55,
+    139.35,
+    35.95
+  ],
+  "date_range": [
+    "2019-01-01T00:00:00",
+    "2019-12-31T00:00:00"
+  ],
+  "time_series": false,
+  "n_images": 1,
+  "shape": [
+    [
+      8,
+      9,
+      1
+    ]
+  ],
+  "fetched_at": "2026-02-11T17:09:21.773868"
+}
