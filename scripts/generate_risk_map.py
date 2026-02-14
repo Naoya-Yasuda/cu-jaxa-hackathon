@@ -22,7 +22,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import BBOX, BBOX_AKITA, PROCESSED_DIR, SIGHTINGS_CSV
+from config import BBOX, BBOX_AKITA, PROCESSED_DIR, SIGHTINGS_CSV, MAST_PRODUCTION_CSV
 
 try:
     import lightgbm as lgb
@@ -181,8 +181,28 @@ def compute_seasonal_factors(sightings_df, mesh_df, sigma_km=5.0):
 
 # ===== Step 3: 統合リスク =====
 
-def compute_combined_risk(spatial_risk_df, akita_mesh, seasonal_factors, month_num):
-    """空間リスク × 季節係数 = 統合リスク"""
+def get_mast_multiplier(year):
+    """堅果類豊凶スコアから年次リスク乗数を計算
+    凶作(score=0) → ×1.5 (高リスク), 豊作(score=1) → ×0.7 (低リスク)
+    """
+    if not MAST_PRODUCTION_CSV.exists():
+        return 1.0, None
+
+    mast_df = pd.read_csv(MAST_PRODUCTION_CSV)
+    row = mast_df[mast_df["year"] == year]
+    if len(row) == 0:
+        return 1.0, None
+
+    score = row.iloc[0]["score"]
+    grade = row.iloc[0]["buna_grade"]
+    # 凶作ほどクマが人里に降りる → リスク増
+    # score: 0(大凶作)→1.5, 0.25(凶作)→1.25, 0.5(並作)→1.0, 1.0(豊作)→0.7
+    multiplier = 1.5 - score * 0.8
+    return multiplier, grade
+
+
+def compute_combined_risk(spatial_risk_df, akita_mesh, seasonal_factors, month_num, target_year=2025):
+    """空間リスク × 季節係数 × 堅果類豊凶補正 = 統合リスク"""
     # akita_meshのmesh_idで空間リスクをjoin
     combined = akita_mesh[["mesh_id", "lat_center", "lon_center"]].copy()
     combined = combined.merge(
@@ -198,15 +218,26 @@ def compute_combined_risk(spatial_risk_df, akita_mesh, seasonal_factors, month_n
     if 4 <= month_num <= 11:
         combined["seasonal_factor"] = combined["seasonal_factor"].clip(lower=0.3)
 
-    raw_risk = combined["spatial_risk"] * combined["seasonal_factor"]
+    # 堅果類豊凶の年次補正
+    mast_mult, mast_grade = get_mast_multiplier(target_year)
+    combined["mast_multiplier"] = mast_mult
+    if mast_grade:
+        print(f"  堅果類豊凶: {target_year}年 = {mast_grade} (リスク乗数: ×{mast_mult:.2f})")
+
+    raw_risk = combined["spatial_risk"] * combined["seasonal_factor"] * mast_mult
+    combined["raw_risk"] = raw_risk  # TOP10ランキング用（正規化前の値を保持）
     # 正規化: 最大値で割って0-100にスケーリング（clipだと上位が潰れるため）
     max_raw = raw_risk.quantile(0.995) if raw_risk.max() > 100 else 100
     combined["risk_score"] = np.clip(raw_risk / max(max_raw, 100) * 100, 0, 100)
+    combined["mast_grade"] = mast_grade if mast_grade else ""
+    combined["mast_multiplier_val"] = mast_mult
 
     print(f"\n  統合リスク統計 ({month_num}月):")
     print(f"    空間リスク:   平均={combined['spatial_risk'].mean():.1f}%, 最大={combined['spatial_risk'].max():.1f}%")
     print(f"    季節係数:     平均={combined['seasonal_factor'].mean():.2f}, "
           f"最大={combined['seasonal_factor'].max():.2f}")
+    if mast_grade:
+        print(f"    堅果類補正:   {mast_grade} → ×{mast_mult:.2f}")
     print(f"    統合リスク:   平均={combined['risk_score'].mean():.1f}%, 最大={combined['risk_score'].max():.1f}%")
     print(f"    高リスク(>30%): {(combined['risk_score'] > 30).sum()}メッシュ")
 
@@ -252,13 +283,17 @@ def generate_folium_map(combined_df, sightings_df, target_month, seasonal_ratio,
         ).add_to(m)
 
     # --- Layer 2: 高リスクTOP10（デフォルト表示、ランキング付き） ---
+    # ★ raw_risk（正規化前）でランキング: 99.5%ile正規化で同率100%が多数発生する問題を回避
     if len(combined_df) > 0:
         top_layer = folium.FeatureGroup(name="高リスク地点 TOP10", show=True)
-        top_risk = combined_df.nlargest(10, "risk_score")
+        rank_col = "raw_risk" if "raw_risk" in combined_df.columns else "risk_score"
+        top_risk = combined_df.nlargest(10, rank_col)
 
         for rank, (_, row) in enumerate(top_risk.iterrows(), 1):
             score = row["risk_score"]
             sf = row["seasonal_factor"]
+            raw = row.get("raw_risk", score)
+            mast_m = row.get("mast_multiplier_val", 1.0)
 
             # ランキング番号付きのDivIcon
             folium.Marker(
@@ -277,8 +312,10 @@ def generate_folium_map(combined_df, sightings_df, target_month, seasonal_ratio,
                     f"<b>#{rank} リスク: {score:.1f}%</b><br>"
                     f"空間リスク: {row['spatial_risk']:.1f}%<br>"
                     f"季節係数: ×{sf:.2f}<br>"
+                    f"堅果類補正: ×{mast_m:.2f}<br>"
+                    f"統合スコア: {raw:.1f}<br>"
                     f"({row['lat_center']:.3f}, {row['lon_center']:.3f})",
-                    max_width=220,
+                    max_width=240,
                 ),
             ).add_to(top_layer)
 
@@ -347,15 +384,26 @@ def generate_folium_map(combined_df, sightings_df, target_month, seasonal_ratio,
             {month_bars}
         </div>
         <hr style="margin:4px 0;">
-        <small>空間リスク(AW3D30+PALSAR-2) × 季節係数</small>
+        <small>空間リスク(AW3D30+PALSAR-2) × 季節係数 × 堅果類豊凶</small>
     </div>
     """
     m.get_root().html.add_child(folium.Element(legend_html))
 
-    # タイトル
+    # 堅果類豊凶情報をcombined_dfから取得
+    mast_grade = ""
+    mast_mult = 1.0
+    if "mast_grade" in combined_df.columns and len(combined_df) > 0:
+        mast_grade = combined_df["mast_grade"].iloc[0]
+    if "mast_multiplier_val" in combined_df.columns and len(combined_df) > 0:
+        mast_mult = combined_df["mast_multiplier_val"].iloc[0]
+
+    # タイトル: 季節係数 + 堅果類豊凶補正を反映した総合リスクレベル
     sr = seasonal_ratio.get(month_num, 1.0)
-    level = "危険" if sr > 2.5 else "警戒" if sr > 1.5 else "注意" if sr > 0.8 else "低め"
-    level_color = "#d73027" if sr > 2.5 else "#fc8d59" if sr > 1.5 else "#fee08b" if sr > 0.8 else "#91cf60"
+    total_multiplier = sr * mast_mult
+    level = "危険" if total_multiplier > 2.5 else "警戒" if total_multiplier > 1.5 else "注意" if total_multiplier > 0.8 else "低め"
+    level_color = "#d73027" if total_multiplier > 2.5 else "#fc8d59" if total_multiplier > 1.5 else "#fee08b" if total_multiplier > 0.8 else "#91cf60"
+
+    mast_info = f" | 堅果類: {mast_grade} ×{mast_mult:.2f}" if mast_grade else ""
 
     title_html = f"""
     <div style="position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
@@ -365,7 +413,7 @@ def generate_folium_map(combined_df, sightings_df, target_month, seasonal_ratio,
         秋田県 クマ出没リスクマップ
         <span style="color:{level_color}; margin-left:8px;">{target_month} [{level}]</span>
         <br><small style="font-weight:normal; font-size:11px;">
-        JAXA: AW3D30標高 + PALSAR-2森林 + MODIS NDVI/LST/GSMaP | 季節係数: ×{sr:.1f}</small>
+        JAXA: AW3D30標高 + PALSAR-2森林 + MODIS NDVI/LST/GSMaP | 季節係数: ×{sr:.1f}{mast_info}</small>
     </div>
     """
     m.get_root().html.add_child(folium.Element(title_html))
@@ -381,38 +429,55 @@ def generate_folium_map(combined_df, sightings_df, target_month, seasonal_ratio,
     return str(output_path)
 
 
+def generate_single_map(target_month, model, mesh_df, sightings_df, output_path=None):
+    """1ヶ月分のリスクマップを生成"""
+    month_num = int(target_month.split("-")[1])
+    target_year = int(target_month.split("-")[0])
+
+    print(f"\n--- {target_month} ---")
+
+    # Step 1: 空間リスク予測
+    spatial_risk = predict_spatial_risk(model, mesh_df, month_num)
+
+    # Step 2: 季節係数計算
+    akita_mesh, seasonal_factors, global_ratio = compute_seasonal_factors(
+        sightings_df, mesh_df, sigma_km=5.0
+    )
+
+    # Step 3: 統合リスク（堅果類豊凶の年次補正付き）
+    combined = compute_combined_risk(spatial_risk, akita_mesh, seasonal_factors, month_num, target_year)
+
+    # Step 4: マップ生成
+    path = generate_folium_map(
+        combined, sightings_df, target_month, global_ratio,
+        output_path=output_path,
+    )
+
+    return path, combined
+
+
 def main():
     parser = argparse.ArgumentParser(description="クマ出没リスクマップ生成 v3")
     parser.add_argument("--month", type=str, default=None,
-                        help="予測対象月 (YYYY-MM)")
+                        help="予測対象月 (YYYY-MM)。カンマ区切りで複数指定可")
+    parser.add_argument("--all-months", action="store_true",
+                        help="データ期間の全月＋1年先まで生成")
     parser.add_argument("--output", type=str, default=None,
-                        help="出力HTMLパス")
+                        help="出力HTMLパス（単月指定時のみ有効）")
     args = parser.parse_args()
-
-    if args.month is None:
-        now = datetime.now()
-        target_month = f"{now.year}-{now.month:02d}" if 4 <= now.month <= 11 else f"{now.year}-07"
-        print(f"対象月未指定のため {target_month} を使用")
-    else:
-        target_month = args.month
-
-    month_num = int(target_month.split("-")[1])
 
     print("=" * 60)
     print("クマ出没リスクマップ v3（空間リスク × 季節係数）")
-    print(f"  対象月: {target_month}")
     print("=" * 60)
 
     # Baselineモデル読み込み（AUC 0.954）
     model_path = MODEL_DIR / "model_baseline.lgb"
     if not model_path.exists():
-        # フォールバック: fullモデル（警告付き）
         model_path = MODEL_DIR / "model_full.lgb"
         if not model_path.exists():
             print("ERROR: モデルファイルが見つかりません。先に train.py を実行してください。")
             sys.exit(1)
         print(f"⚠ WARNING: model_baseline.lgb が見つかりません。model_full.lgb にフォールバック。")
-        print(f"  → train.py を再実行してベースラインモデルを生成してください。")
     model = lgb.Booster(model_file=str(model_path))
     print(f"モデル: {model_path.name} (特徴量: {model.feature_name()})")
 
@@ -424,28 +489,44 @@ def main():
     sightings_df = pd.read_csv(SIGHTINGS_CSV)
     print(f"目撃データ: {len(sightings_df)}件")
 
-    # Step 1: 空間リスク予測
-    print("\n[Step 1: 空間リスク予測（Baselineモデル）]")
-    spatial_risk = predict_spatial_risk(model, mesh_df, month_num)
+    # 対象月リスト決定
+    if args.all_months:
+        # データ期間 (2022-04 ~ 2025-12) + 1年先 (2026-01 ~ 2026-12)
+        from config import DATE_START, DATE_END
+        start_year = int(DATE_START[:4])
+        end_year = int(DATE_END[:4]) + 1  # +1年先
+        target_months = []
+        for y in range(start_year, end_year + 1):
+            for m in range(1, 13):
+                target_months.append(f"{y}-{m:02d}")
+        print(f"\n全月モード: {target_months[0]} ~ {target_months[-1]} ({len(target_months)}ヶ月)")
+    elif args.month:
+        target_months = [m.strip() for m in args.month.split(",")]
+    else:
+        now = datetime.now()
+        target_months = [f"{now.year}-07", f"{now.year}-10"]
+        print(f"対象月未指定のため {target_months} を使用")
 
-    # Step 2: 季節係数計算
-    print("\n[Step 2: 季節係数計算（実測データ）]")
-    akita_mesh, seasonal_factors, global_ratio = compute_seasonal_factors(
-        sightings_df, mesh_df, sigma_km=5.0
-    )
+    # 生成
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    results = []
+    for tm in target_months:
+        path, combined = generate_single_map(
+            tm, model, mesh_df, sightings_df,
+            output_path=args.output if len(target_months) == 1 else None,
+        )
+        high_risk = (combined["risk_score"] > 30).sum() if combined is not None else 0
+        results.append({"month": tm, "path": path, "high_risk_meshes": high_risk})
 
-    # Step 3: 統合リスク
-    print("\n[Step 3: 統合リスク計算]")
-    combined = compute_combined_risk(spatial_risk, akita_mesh, seasonal_factors, month_num)
+    # サマリー
+    print("\n" + "=" * 60)
+    print("生成結果サマリー")
+    print(f"{'月':>10} {'高リスク':>10} {'ファイル'}")
+    print("-" * 60)
+    for r in results:
+        print(f"{r['month']:>10} {r['high_risk_meshes']:>8}メッシュ  {r['path']}")
 
-    # Step 4: マップ生成
-    print("\n[Step 4: マップ生成]")
-    output_path = generate_folium_map(
-        combined, sightings_df, target_month, global_ratio,
-        output_path=args.output,
-    )
-
-    print("\n完了！")
+    print(f"\n合計: {len(results)}ヶ月分のリスクマップを生成完了")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
     BBOX, JAXA_DIR, SIGHTINGS_CSV, PROCESSED_DIR,
     MESH_SIZE_KM, NEG_SAMPLE_RATIO, DATE_START, DATE_END,
+    MAST_PRODUCTION_CSV,
 )
 
 # 1度 ≈ 111km（緯度方向）/ 1度 ≈ 91km（経度方向、北緯40度付近）
@@ -398,14 +399,26 @@ def main():
     # 4. 学習データ生成（正例 + ネガティブサンプリング負例）
     train_df = build_training_data(mesh_df, sightings_df, BBOX)
 
-    # 5. 特徴量カラムを整理
+    # 5. 堅果類豊凶スコアを付与
+    if MAST_PRODUCTION_CSV.exists():
+        mast_df = pd.read_csv(MAST_PRODUCTION_CSV)
+        mast_score_dict = dict(zip(mast_df["year"], mast_df["score"]))
+        train_df["_year"] = train_df["year_month"].astype(str).str[:4].astype(int)
+        train_df["mast_score"] = train_df["_year"].map(mast_score_dict)
+        train_df.drop(columns=["_year"], inplace=True)
+        print(f"\n  堅果類豊凶スコア付与: {train_df['mast_score'].notna().sum()}件")
+        print(f"    年別スコア: {mast_score_dict}")
+    else:
+        print(f"\n  Warning: 堅果類豊凶データが見つかりません: {MAST_PRODUCTION_CSV}")
+
+    # 6. 特徴量カラムを整理
     feature_cols = [
         "mesh_id", "year_month", "month", "target", "n_sightings",
         "lat_center", "lon_center",
         "elevation", "is_forest", "landcover",
     ]
     # 時系列特徴量があれば追加
-    for col in ["ndvi", "ndvi_diff", "ndvi_anomaly", "lst_celsius", "precip"]:
+    for col in ["ndvi", "ndvi_diff", "ndvi_anomaly", "lst_celsius", "precip", "mast_score"]:
         if col in train_df.columns:
             feature_cols.append(col)
 

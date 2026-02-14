@@ -43,8 +43,8 @@ LOCATION_FEATURES = ["lat_center", "lon_center"]
 # 空間弁別用（DEM/FNF）: 「どこが危ないか」
 SPATIAL_FEATURES = ["elevation", "is_forest", "landcover"]
 
-# 時間弁別用（衛星データ + 月）: 「いつ危ないか」
-TEMPORAL_FEATURES = ["ndvi", "ndvi_diff", "ndvi_anomaly", "lst_celsius", "precip", "month"]
+# 時間弁別用（衛星データ + 月 + 堅果類豊凶）: 「いつ危ないか」
+TEMPORAL_FEATURES = ["ndvi", "ndvi_diff", "ndvi_anomaly", "lst_celsius", "precip", "month", "mast_score"]
 
 # ベースライン（衛星データなし）: 位置+地形+月のみ
 BASELINE_FEATURES = LOCATION_FEATURES + ["elevation", "is_forest", "month"]
@@ -282,7 +282,7 @@ def compare_models(baseline_result, full_result):
     if full_result and "importance" in full_result:
         imp = full_result["importance"]
         total = imp["importance"].sum()
-        satellite_features = ["ndvi", "ndvi_diff", "ndvi_anomaly", "lst_celsius", "precip", "landcover"]
+        satellite_features = ["ndvi", "ndvi_diff", "ndvi_anomaly", "lst_celsius", "precip", "landcover", "mast_score"]
         sat_imp = imp[imp["feature"].isin(satellite_features)]["importance"].sum()
         print(f"\n  衛星データ特徴量の寄与率: {sat_imp/total*100:.1f}% (gain合計比)")
 

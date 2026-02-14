@@ -33,10 +33,19 @@ DATE_END = "2025-12-31T00:00:00"
 # ===== JAXA Earth API コレクション（確認済みパラメータ） =====
 JAXA_COLLECTIONS = {
     "ndvi_monthly": {
+        # ★ 調査結果 (2025-02-14):
+        #   JAXA Earth APIのGCOM-C NDVIは L3 1/24deg ≈ 約5km（MODIS同等）。
+        #   250mネイティブデータはG-Portal直接DLのみ（API非対応）。
+        #   GCOM-C 8日間隔版: JAXA.JASMES_GCOM-C.SGLI_standard.L2-NDVI.daytime.v3_japan_8-day
+        #   → 月次集計版はAPI上に存在しない可能性が高い。
+        #   当面はMODIS月次を使用し、ローカルで以下で最終確認：
+        #     je.ImageCollectionList().filter_name(keywords=["ndvi","GCOM-C"])
+        #     je.ImageCollectionList().filter_name(keywords=["ndvi","SGLI"])
         "collection": "JAXA.JASMES_Terra.MODIS-Aqua.MODIS_ndvi.v811_global_monthly",
+        "collection_gcomc_8day": "JAXA.JASMES_GCOM-C.SGLI_standard.L2-NDVI.daytime.v3_japan_8-day",
         "band": "ndvi",
-        "ppu": 20,
-        "description": "NDVI（植生指数）月次 ~5km → 時間弁別用（季節・植生状態）",
+        "ppu": 20,  # MODIS ~5km。GCOM-C 8日版に切替時はppu=120(~1km)に変更
+        "description": "NDVI（植生指数）MODIS ~5km月次。GCOM-C 8日版への切替は要ローカル検証",
         "time_series": True,
     },
     "dem": {
@@ -96,6 +105,9 @@ SIGHTINGS_CSV = SIGHTINGS_DIR / "tohoku_sightings.csv"
 
 # 旧・静岡データ（参考用に残す）
 SIGHTINGS_CSV_SHIZUOKA = DATA_DIR / "tukinowaguma_source1120.csv"
+
+# ===== 堅果類豊凶データ =====
+MAST_PRODUCTION_CSV = RAW_DIR / "mast_production.csv"
 
 # ===== ネガティブサンプリング設定 =====
 NEG_SAMPLE_RATIO = 15  # 正例1件に対して負例15件を抽出
