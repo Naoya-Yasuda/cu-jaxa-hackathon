@@ -1,0 +1,598 @@
+﻿<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>秋田県 クマ出没リスクマップ 2025 (3D)</title>
+<link href="https://unpkg.com/maplibre-gl@5.2.0/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@5.2.0/dist/maplibre-gl.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Segoe UI","Hiragino Sans",sans-serif;}
+#map{width:100%;height:100vh;}
+.top-bar{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(255,255,255,0.95);color:#333;padding:8px 16px;display:flex;align-items:center;gap:16px;border-bottom:2px solid #d73027;box-shadow:0 2px 6px rgba(0,0,0,0.12);}
+.top-bar h1{font-size:15px;white-space:nowrap;}
+.top-bar h1 span{color:#d73027;}
+.slider-area{flex:1;display:flex;align-items:center;gap:12px;min-width:0;}
+.month-label{font-size:26px;font-weight:bold;color:#d73027;min-width:50px;text-align:center;}
+.slider-wrap{flex:1;display:flex;flex-direction:column;gap:2px;}
+input[type=range]{-webkit-appearance:none;width:100%;height:6px;border-radius:3px;background:linear-gradient(to right,#91cf60,#fee08b,#d73027);outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#d73027;border:2px solid #fff;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.3);}
+.month-ticks{display:flex;justify-content:space-between;padding:0 8px;}
+.month-ticks span{font-size:10px;color:#888;width:28px;text-align:center;cursor:pointer;}
+.month-ticks span.active{color:#d73027;font-weight:bold;}
+.play-btn,.loc-btn{background:#d73027;border:none;color:#fff;height:34px;border-radius:18px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 12px;font-weight:700;}
+.play-btn:hover,.loc-btn:hover{background:#b71c1c;}
+.info-panel{position:fixed;bottom:16px;left:16px;z-index:1000;background:rgba(255,255,255,0.95);color:#333;padding:14px 18px;border-radius:8px;border:1px solid #ccc;box-shadow:0 2px 8px rgba(0,0,0,0.12);max-width:300px;font-size:13px;line-height:1.6;}
+.info-panel h3{font-size:14px;margin-bottom:6px;}
+.stat-row{display:flex;justify-content:space-between;}
+.stat-val{font-weight:bold;color:#d73027;}
+.risk-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-weight:bold;font-size:12px;margin-left:6px;}
+.risk-danger{background:#d73027;color:#fff;}
+.risk-warning{background:#fc8d59;color:#fff;}
+.risk-caution{background:#fee08b;color:#333;}
+.risk-low{background:#91cf60;color:#333;}
+.season-bar{display:flex;align-items:flex-end;gap:2px;height:36px;margin-top:6px;}
+.season-bar div{width:16px;border-radius:2px 2px 0 0;text-align:center;font-size:9px;color:#666;transition:all 0.3s;}
+.season-bar div.active{border:2px solid #333;}
+.legend{position:fixed;bottom:16px;right:16px;z-index:1000;background:rgba(255,255,255,0.95);color:#333;padding:10px 14px;border-radius:8px;border:1px solid #ccc;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.12);}
+.legend-item{display:flex;align-items:center;gap:8px;margin:3px 0;}
+.legend-color{width:20px;height:12px;border-radius:2px;}
+.mast-banner{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(215,48,39,0.9);color:#fff;padding:3px 14px;border-radius:0 0 6px 6px;font-size:11px;font-weight:bold;}
+.layer-toggle{position:fixed;top:58px;right:16px;z-index:1000;background:rgba(255,255,255,0.95);border-radius:6px;padding:8px 12px;border:1px solid #ccc;color:#333;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+.layer-toggle label{display:flex;align-items:center;gap:6px;margin:3px 0;cursor:pointer;}
+.maplibregl-ctrl-top-right{top:110px;}
+.hint{position:fixed;top:56px;left:16px;z-index:1000;background:rgba(0,0,0,0.65);color:#fff;padding:6px 10px;border-radius:5px;font-size:11px;max-width:520px;}
+.top-marker{width:28px;height:28px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);color:#fff;text-align:center;line-height:24px;font-weight:700;font-size:13px;}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <h1>秋田県 <span>クマ出没リスク</span> 2025</h1>
+  <div class="slider-area">
+    <button class="play-btn" id="playBtn">再生</button>
+    <button class="loc-btn" id="locBtn">現在地</button>
+    <div class="month-label" id="monthLabel">7月</div>
+    <div class="slider-wrap">
+      <input type="range" id="monthSlider" min="1" max="12" value="7">
+      <div class="month-ticks" id="monthTicks"></div>
+    </div>
+  </div>
+</div>
+<div class="mast-banner" id="mastBanner"></div>
+<div class="hint" id="hint">位置情報の許可後、3D地図上に現在地を表示し、Google Mapsへのリンクを出します。</div>
+<div class="layer-toggle">
+  <label><input type="checkbox" id="togTerrain" checked> 地形3D(標高)</label>
+  <label><input type="checkbox" id="togBuildings" checked> 建物3D(OSM)</label>
+  <label><input type="checkbox" id="togHeat" checked> ヒートマップ</label>
+  <label><input type="checkbox" id="togTop10" checked> TOP10</label>
+  <label><input type="checkbox" id="togSightings"> 過去の目撃</label>
+</div>
+<div id="map"></div>
+<div class="info-panel" id="infoPanel"></div>
+<div class="legend">
+  <div style="font-weight:bold;margin-bottom:4px;">リスクレベル</div>
+  <div class="legend-item"><div class="legend-color" style="background:#d73027"></div>高リスク</div>
+  <div class="legend-item"><div class="legend-color" style="background:#fc8d59"></div>中高リスク</div>
+  <div class="legend-item"><div class="legend-color" style="background:#fee08b"></div>中リスク</div>
+  <div class="legend-item"><div class="legend-color" style="background:#1a9850"></div>低リスク</div>
+  <hr style="margin:6px 0;border:none;border-top:1px solid #ddd;">
+  <div style="font-size:10px;color:#888;">OSM + MapLibre + Elevation + OSM Buildings</div>
+</div>
+<script>
+let RISK_DATA = null;
+let currentMonth = 7;
+let playing = false;
+let playInterval = null;
+let top10Markers = [];
+let userPopup = null;
+let overpassTimer = null;
+let watchId = null;
+let hasCenteredOnUser = false;
+
+const style = {
+  version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "&copy; OpenStreetMap"
+    },
+    dem: {
+      type: "raster-dem",
+      tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      encoding: "terrarium",
+      maxzoom: 14
+    },
+    riskHeat: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    sightings: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    userLoc: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    userAcc: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    buildings: { type: "geojson", data: { type: "FeatureCollection", features: [] } }
+  },
+  layers: [
+    { id: "osm", type: "raster", source: "osm" },
+    {
+      id: "hillshade",
+      type: "hillshade",
+      source: "dem",
+      paint: { "hillshade-exaggeration": 0.35 }
+    },
+    {
+      id: "risk-heat",
+      type: "heatmap",
+      source: "riskHeat",
+      maxzoom: 15,
+      paint: {
+        "heatmap-weight": ["interpolate", ["linear"], ["get", "w"], 0, 0.1, 100, 1],
+        "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 12, 3.0],
+        "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 8, 18, 12, 46, 14, 72],
+        "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.85, 12, 0.65, 15, 0.35],
+        "heatmap-color": [
+          "interpolate", ["linear"], ["heatmap-density"],
+          0, "rgba(0,0,0,0)",
+          0.25, "#91cf60",
+          0.5, "#fee08b",
+          0.75, "#fc8d59",
+          1, "#d73027"
+        ]
+      }
+    },
+    {
+      id: "risk-heat-fallback",
+      type: "circle",
+      source: "riskHeat",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4, 12, 9, 14, 13],
+        "circle-color": [
+          "interpolate", ["linear"], ["get", "w"],
+          0, "#91cf60",
+          30, "#fee08b",
+          60, "#fc8d59",
+          100, "#d73027"
+        ],
+        "circle-opacity": 0.22,
+        "circle-blur": 0.65
+      }
+    },
+    {
+      id: "sightings",
+      type: "circle",
+      source: "sightings",
+      layout: { visibility: "none" },
+      paint: {
+        "circle-radius": 3,
+        "circle-color": "#2196F3",
+        "circle-opacity": 0.55,
+        "circle-stroke-color": "#fff",
+        "circle-stroke-width": 1
+      }
+    },
+    {
+      id: "buildings-3d",
+      type: "fill-extrusion",
+      source: "buildings",
+      layout: { visibility: "visible" },
+      minzoom: 13,
+      paint: {
+        "fill-extrusion-color": ["coalesce", ["get", "color"], "#c7b299"],
+        "fill-extrusion-height": ["coalesce", ["get", "height"], 12],
+        "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
+        "fill-extrusion-opacity": 0.8
+      }
+    },
+    {
+      id: "user-accuracy",
+      type: "fill",
+      source: "userAcc",
+      paint: {
+        "fill-color": "#1565c0",
+        "fill-opacity": 0.12
+      }
+    },
+    {
+      id: "user-accuracy-line",
+      type: "line",
+      source: "userAcc",
+      paint: {
+        "line-color": "#1565c0",
+        "line-width": 1.5,
+        "line-opacity": 0.6
+      }
+    },
+    {
+      id: "user-halo",
+      type: "circle",
+      source: "userLoc",
+      paint: { "circle-radius": 18, "circle-color": "#1565c0", "circle-opacity": 0.18 }
+    },
+    {
+      id: "user-point",
+      type: "circle",
+      source: "userLoc",
+      paint: {
+        "circle-radius": 7,
+        "circle-color": "#0d47a1",
+        "circle-stroke-color": "#fff",
+        "circle-stroke-width": 2
+      }
+    }
+  ]
+};
+
+const map = new maplibregl.Map({
+  container: "map",
+  style,
+  center: [140.15, 39.75],
+  zoom: 9,
+  pitch: 55,
+  bearing: -15,
+  antialias: true
+});
+map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+function riskColor(score) {
+  if (score >= 50) return "#d73027";
+  if (score >= 30) return "#fc8d59";
+  return "#fee08b";
+}
+
+function toHeatGeo(points) {
+  return {
+    type: "FeatureCollection",
+    features: points.map(p => ({
+      type: "Feature",
+      properties: { w: Number(p[2] || 0) },
+      geometry: { type: "Point", coordinates: [p[1], p[0]] }
+    }))
+  };
+}
+
+function toSightGeo(points) {
+  return {
+    type: "FeatureCollection",
+    features: points.map(p => ({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Point", coordinates: [p[1], p[0]] }
+    }))
+  };
+}
+
+function clearTop10() {
+  top10Markers.forEach(m => m.remove());
+  top10Markers = [];
+}
+
+function drawTop10(md) {
+  clearTop10();
+  if (!document.getElementById("togTop10").checked) return;
+
+  md.top10.forEach(p => {
+    const el = document.createElement("div");
+    el.className = "top-marker";
+    el.style.background = riskColor(Number(p.risk_score));
+    el.textContent = p.rank;
+
+    const popup = new maplibregl.Popup({ offset: 16 }).setHTML(
+      `<b>#${p.rank} リスク: ${p.risk_score}%</b><br>` +
+      `空間リスク: ${p.spatial_risk}%<br>` +
+      `季節係数: ×${p.seasonal_factor}<br>` +
+      `統合スコア: ${p.raw_risk}<br>` +
+      `<small>(${p.lat}, ${p.lon})</small>`
+    );
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([p.lon, p.lat])
+      .setPopup(popup)
+      .addTo(map);
+
+    top10Markers.push(marker);
+  });
+}
+
+function setMonth(m) {
+  currentMonth = parseInt(m, 10);
+  document.getElementById("monthSlider").value = currentMonth;
+  document.getElementById("monthLabel").textContent = currentMonth + "月";
+  document.querySelectorAll(".month-ticks span").forEach(s => s.classList.remove("active"));
+  const tick = document.getElementById("tick_" + currentMonth);
+  if (tick) tick.classList.add("active");
+  if (RISK_DATA) renderMonth(currentMonth);
+}
+
+function togglePlay() {
+  playing = !playing;
+  document.getElementById("playBtn").textContent = playing ? "停止" : "再生";
+  if (playing) {
+    playInterval = setInterval(() => {
+      let n = currentMonth + 1;
+      if (n > 12) n = 1;
+      setMonth(n);
+    }, 1500);
+  } else {
+    clearInterval(playInterval);
+  }
+}
+
+function updateInfoPanel(m, md) {
+  const sr = Number(md.seasonal_ratio || 0);
+  const total = sr * Number(RISK_DATA.mast_multiplier || 1);
+  let level = "低め";
+  let cls = "risk-low";
+  if (total > 2.5) { level = "危険"; cls = "risk-danger"; }
+  else if (total > 1.5) { level = "注意"; cls = "risk-warning"; }
+  else if (total > 0.8) { level = "やや注意"; cls = "risk-caution"; }
+
+  let bars = "";
+  for (let i = 1; i <= 12; i++) {
+    const r = Number(RISK_DATA.months[String(i)].seasonal_ratio || 0);
+    const h = Math.max(3, Math.min(32, Math.round(r * 7)));
+    const c = r > 2 ? "#d73027" : r > 1.3 ? "#fc8d59" : r > 0.5 ? "#91cf60" : "#1a9850";
+    const act = i === m ? "active" : "";
+    bars += `<div class="${act}" style="background:${c};height:${h}px;" title="${i}月: ${r.toFixed(2)}">${i}</div>`;
+  }
+
+  document.getElementById("infoPanel").innerHTML =
+    `<h3>${RISK_DATA.year}年 ${m}月 <span class="risk-badge ${cls}">${level}</span></h3>` +
+    `<div class="stat-row"><span>季節係数</span><span class="stat-val">×${sr.toFixed(2)}</span></div>` +
+    `<div class="stat-row"><span>堅果補正</span><span class="stat-val">${RISK_DATA.mast_grade} ×${RISK_DATA.mast_multiplier}</span></div>` +
+    `<div class="stat-row"><span>高リスクメッシュ</span><span class="stat-val">${Number(md.high_risk_count).toLocaleString()}</span></div>` +
+    `<div class="stat-row"><span>過去の目撃件数</span><span class="stat-val">${Number(md.sighting_count).toLocaleString()}件</span></div>` +
+    `<div style="margin-top:6px;font-size:11px;color:#888;">月別の出現傾向:</div>` +
+    `<div class="season-bar">${bars}</div>`;
+
+  document.getElementById("mastBanner").textContent =
+    `${RISK_DATA.year}年 堅果類: ${RISK_DATA.mast_grade} (リスク×${RISK_DATA.mast_multiplier})`;
+}
+
+function renderMonth(m) {
+  const md = RISK_DATA.months[String(m)];
+  if (!md) return;
+  map.getSource("riskHeat").setData(toHeatGeo(md.heatmap || []));
+  map.getSource("sightings").setData(toSightGeo(md.sightings || []));
+  drawTop10(md);
+  updateInfoPanel(m, md);
+}
+
+function setLayerVisible(id, enabled) {
+  if (map.getLayer(id)) {
+    map.setLayoutProperty(id, "visibility", enabled ? "visible" : "none");
+  }
+}
+
+function updateLayers() {
+  setLayerVisible("risk-heat", document.getElementById("togHeat").checked);
+  setLayerVisible("risk-heat-fallback", document.getElementById("togHeat").checked);
+  setLayerVisible("sightings", document.getElementById("togSightings").checked);
+  setLayerVisible("buildings-3d", document.getElementById("togBuildings").checked);
+  if (RISK_DATA) drawTop10(RISK_DATA.months[String(currentMonth)]);
+
+  const terrainOn = document.getElementById("togTerrain").checked;
+  map.setTerrain(terrainOn ? { source: "dem", exaggeration: 1.25 } : null);
+  map.setPaintProperty("hillshade", "hillshade-exaggeration", terrainOn ? 0.35 : 0);
+}
+
+function parseHeight(tags) {
+  if (!tags) return { h: 12, b: 0 };
+  const num = (v) => {
+    if (!v) return NaN;
+    const m = String(v).match(/[\d.]+/);
+    return m ? Number(m[0]) : NaN;
+  };
+  let h = num(tags.height);
+  if (!Number.isFinite(h)) {
+    const lv = num(tags["building:levels"]);
+    h = Number.isFinite(lv) ? lv * 3 : 12;
+  }
+  let b = num(tags.min_height);
+  if (!Number.isFinite(b)) {
+    const bl = num(tags["building:min_level"]);
+    b = Number.isFinite(bl) ? bl * 3 : 0;
+  }
+  h = Math.max(4, Math.min(250, h));
+  b = Math.max(0, Math.min(h - 1, b));
+  return { h, b };
+}
+
+function overpassToGeoJSON(elements) {
+  const features = [];
+  for (const el of elements) {
+    if (!el.geometry || el.geometry.length < 3) continue;
+    const ring = el.geometry.map(p => [p.lon, p.lat]);
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
+    const hb = parseHeight(el.tags || {});
+    features.push({
+      type: "Feature",
+      properties: {
+        height: hb.h,
+        min_height: hb.b,
+        color: hb.h > 45 ? "#b38d74" : hb.h > 20 ? "#c7b299" : "#d9c8b8"
+      },
+      geometry: { type: "Polygon", coordinates: [ring] }
+    });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+async function fetchOSMBuildings() {
+  if (map.getZoom() < 13) {
+    map.getSource("buildings").setData({ type: "FeatureCollection", features: [] });
+    return;
+  }
+  const b = map.getBounds();
+  const s = b.getSouth().toFixed(5);
+  const w = b.getWest().toFixed(5);
+  const n = b.getNorth().toFixed(5);
+  const e = b.getEast().toFixed(5);
+
+  const q = `[out:json][timeout:25];(way["building"](${s},${w},${n},${e});relation["building"](${s},${w},${n},${e}););out body geom tags;`;
+  const url = "https://overpass-api.de/api/interpreter";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+    body: "data=" + encodeURIComponent(q)
+  });
+  if (!res.ok) throw new Error("Overpass API error: " + res.status);
+  const data = await res.json();
+  const fc = overpassToGeoJSON(data.elements || []);
+  map.getSource("buildings").setData(fc);
+}
+
+function scheduleFetchBuildings() {
+  if (overpassTimer) clearTimeout(overpassTimer);
+  overpassTimer = setTimeout(() => {
+    fetchOSMBuildings().catch(err => console.warn(err));
+  }, 1200);
+}
+
+function makeAccuracyPolygon(lat, lon, accuracyMeters) {
+  const r = Math.max(10, Number(accuracyMeters || 30));
+  const latDeg = r / 111320;
+  const lonDeg = r / (111320 * Math.max(0.1, Math.cos(lat * Math.PI / 180)));
+  const pts = [];
+  const steps = 48;
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    pts.push([lon + Math.cos(a) * lonDeg, lat + Math.sin(a) * latDeg]);
+  }
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties: { accuracy: r },
+      geometry: { type: "Polygon", coordinates: [pts] }
+    }]
+  };
+}
+
+function showUserLocation(lat, lon, accuracyMeters, shouldFly) {
+  map.getSource("userLoc").setData({
+    type: "FeatureCollection",
+    features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [lon, lat] } }]
+  });
+  map.getSource("userAcc").setData(makeAccuracyPolygon(lat, lon, accuracyMeters));
+
+  const md = RISK_DATA ? RISK_DATA.months[String(currentMonth)] : null;
+  const top1 = md && md.top10 && md.top10.length ? md.top10[0] : null;
+  const gNow = `https://www.google.com/maps?q=${lat},${lon}`;
+  const gRoute = top1
+    ? `https://www.google.com/maps/dir/?api=1&origin=${lat},${lon}&destination=${top1.lat},${top1.lon}&travelmode=walking`
+    : null;
+
+  if (userPopup) userPopup.remove();
+  userPopup = new maplibregl.Popup({ offset: 16 })
+    .setLngLat([lon, lat])
+    .setHTML(
+      `<b>あなたの現在地</b><br>` +
+      `精度: 約${Math.round(Number(accuracyMeters || 0))}m<br>` +
+      `<a href="${gNow}" target="_blank" rel="noopener">Google Mapsで現在地を開く</a>` +
+      (gRoute ? `<br><a href="${gRoute}" target="_blank" rel="noopener">今月TOP1地点への経路</a>` : "")
+    )
+    .addTo(map);
+
+  document.getElementById("hint").style.display = "none";
+  if (shouldFly) {
+    map.flyTo({ center: [lon, lat], zoom: Math.max(12, map.getZoom()), speed: 0.9 });
+  }
+}
+
+function stopLocationTracking() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  document.getElementById("locBtn").textContent = "現在地";
+}
+
+function startLocationTracking() {
+  if (!navigator.geolocation) {
+    alert("このブラウザは位置情報をサポートしていません。");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      hasCenteredOnUser = true;
+      showUserLocation(
+        p.coords.latitude,
+        p.coords.longitude,
+        p.coords.accuracy,
+        true
+      );
+    },
+    e => alert("位置情報を取得できませんでした: " + e.message),
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+  );
+
+  watchId = navigator.geolocation.watchPosition(
+    p => {
+      showUserLocation(
+        p.coords.latitude,
+        p.coords.longitude,
+        p.coords.accuracy,
+        !hasCenteredOnUser
+      );
+      hasCenteredOnUser = true;
+    },
+    e => {
+      console.warn("watchPosition error:", e.message);
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
+  );
+  document.getElementById("locBtn").textContent = "追跡停止";
+}
+
+function toggleLocationTracking() {
+  if (watchId === null) startLocationTracking();
+  else stopLocationTracking();
+}
+
+function buildTicks() {
+  const ticksEl = document.getElementById("monthTicks");
+  for (let mi = 1; mi <= 12; mi++) {
+    const sp = document.createElement("span");
+    sp.textContent = mi + "月";
+    sp.id = "tick_" + mi;
+    sp.onclick = () => setMonth(mi);
+    ticksEl.appendChild(sp);
+  }
+}
+
+async function init() {
+  const resp = await fetch("./risk_data_2025.json");
+  if (!resp.ok) throw new Error("risk_data_2025.json の読み込みに失敗しました");
+  RISK_DATA = await resp.json();
+
+  buildTicks();
+  setMonth(currentMonth);
+  updateLayers();
+  scheduleFetchBuildings();
+
+  document.getElementById("monthSlider").addEventListener("input", e => setMonth(e.target.value));
+  document.getElementById("playBtn").addEventListener("click", togglePlay);
+  document.getElementById("locBtn").addEventListener("click", toggleLocationTracking);
+  ["togTerrain", "togBuildings", "togHeat", "togTop10", "togSightings"].forEach(id => {
+    document.getElementById(id).addEventListener("change", updateLayers);
+  });
+
+  map.on("moveend", scheduleFetchBuildings);
+  map.on("zoomend", scheduleFetchBuildings);
+}
+
+map.on("load", () => {
+  map.setTerrain({ source: "dem", exaggeration: 1.25 });
+  init().catch(err => {
+    document.getElementById("infoPanel").innerHTML =
+      `<b>読み込みエラー</b><br>${err.message}<br><br>` +
+      `HTTPサーバー経由で開いてください。`;
+  });
+});
+</script>
+</body>
+</html>
