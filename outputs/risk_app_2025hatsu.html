@@ -123,39 +123,20 @@ const style = {
     },
     {
       id: "risk-heat",
-      type: "heatmap",
-      source: "riskHeat",
-      maxzoom: 15,
-      paint: {
-        "heatmap-weight": ["interpolate", ["linear"], ["get", "w"], 0, 0.1, 100, 1],
-        "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 12, 3.0],
-        "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 8, 18, 12, 46, 14, 72],
-        "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.85, 12, 0.65, 15, 0.35],
-        "heatmap-color": [
-          "interpolate", ["linear"], ["heatmap-density"],
-          0, "rgba(0,0,0,0)",
-          0.25, "#91cf60",
-          0.5, "#fee08b",
-          0.75, "#fc8d59",
-          1, "#d73027"
-        ]
-      }
-    },
-    {
-      id: "risk-heat-fallback",
-      type: "circle",
+      type: "fill",
       source: "riskHeat",
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4, 12, 9, 14, 13],
-        "circle-color": [
+        "fill-color": [
           "interpolate", ["linear"], ["get", "w"],
-          0, "#91cf60",
-          30, "#fee08b",
+          0, "#1a9850",
+          20, "#91cf60",
+          40, "#fee08b",
           60, "#fc8d59",
-          100, "#d73027"
+          80, "#d73027",
+          100, "#b2182b"
         ],
-        "circle-opacity": 0.22,
-        "circle-blur": 0.65
+        "fill-opacity": 0.58,
+        "fill-antialias": false
       }
     },
     {
@@ -241,12 +222,40 @@ function riskColor(score) {
 }
 
 function toHeatGeo(points) {
+  if (!points || points.length === 0) {
+    return { type: "FeatureCollection", features: [] };
+  }
+
+  function minStep(values, fallback) {
+    const uniq = [...new Set(values.map(v => Number(v).toFixed(6)))].map(Number).sort((a, b) => a - b);
+    let min = Infinity;
+    for (let i = 1; i < uniq.length; i++) {
+      const d = uniq[i] - uniq[i - 1];
+      if (d > 0 && d < min) min = d;
+    }
+    return Number.isFinite(min) ? min : fallback;
+  }
+
+  const latStep = minStep(points.map(p => p[0]), 0.01);
+  const lonStep = minStep(points.map(p => p[1]), 0.01);
+  const halfLat = latStep / 2;
+  const halfLon = lonStep / 2;
+
   return {
     type: "FeatureCollection",
     features: points.map(p => ({
       type: "Feature",
       properties: { w: Number(p[2] || 0) },
-      geometry: { type: "Point", coordinates: [p[1], p[0]] }
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [p[1] - halfLon, p[0] - halfLat],
+          [p[1] + halfLon, p[0] - halfLat],
+          [p[1] + halfLon, p[0] + halfLat],
+          [p[1] - halfLon, p[0] + halfLat],
+          [p[1] - halfLon, p[0] - halfLat]
+        ]]
+      }
     }))
   };
 }
@@ -366,7 +375,6 @@ function setLayerVisible(id, enabled) {
 
 function updateLayers() {
   setLayerVisible("risk-heat", document.getElementById("togHeat").checked);
-  setLayerVisible("risk-heat-fallback", document.getElementById("togHeat").checked);
   setLayerVisible("sightings", document.getElementById("togSightings").checked);
   setLayerVisible("buildings-3d", document.getElementById("togBuildings").checked);
   if (RISK_DATA) drawTop10(RISK_DATA.months[String(currentMonth)]);
