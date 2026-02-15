@@ -510,12 +510,7 @@ function showUserLocation(lat, lon, accuracyMeters, shouldFly) {
   });
   map.getSource("userAcc").setData(makeAccuracyPolygon(lat, lon, accuracyMeters));
 
-  const md = RISK_DATA ? RISK_DATA.months[String(currentMonth)] : null;
-  const top1 = md && md.top10 && md.top10.length ? md.top10[0] : null;
   const gNow = `https://www.google.com/maps?q=${lat},${lon}`;
-  const gRoute = top1
-    ? `https://www.google.com/maps/dir/?api=1&origin=${lat},${lon}&destination=${top1.lat},${top1.lon}&travelmode=walking`
-    : null;
 
   if (userPopup) userPopup.remove();
   userPopup = new maplibregl.Popup({ offset: 16 })
@@ -523,8 +518,7 @@ function showUserLocation(lat, lon, accuracyMeters, shouldFly) {
     .setHTML(
       `<b>あなたの現在地</b><br>` +
       `精度: 約${Math.round(Number(accuracyMeters || 0))}m<br>` +
-      `<a href="${gNow}" target="_blank" rel="noopener">Google Mapsで現在地を開く</a>` +
-      (gRoute ? `<br><a href="${gRoute}" target="_blank" rel="noopener">今月TOP1地点への経路</a>` : "")
+      `<a href="${gNow}" target="_blank" rel="noopener">Google Mapsで現在地を開く</a>`
     )
     .addTo(map);
 
